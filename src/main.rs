@@ -109,15 +109,15 @@ fn setup_level(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // commands.spawn((
-    //     RigidBody::Static,
-    //     Collider::cuboid(100.0, 0.1, 100.0),
-    //     PbrBundle {
-    //         mesh: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(50.0))),
-    //         material: materials.add(Color::Srgba(palettes::css::BLACK)),
-    //         ..default()
-    //     },
-    // ));
+    commands.spawn((
+        RigidBody::Static,
+        Collider::cuboid(100.0, 0.1, 100.0),
+        PbrBundle {
+            mesh: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(50.0))),
+            material: materials.add(Color::Srgba(palettes::css::BLACK)),
+            ..default()
+        },
+    ));
 
     commands.spawn((
         RigidBody::Static,
@@ -148,7 +148,7 @@ fn setup_level(
         PbrBundle {
             mesh: meshes.add(Cuboid::from_size(Vec3::new(10.0, 5.0, 2.0))),
             transform: Transform::from_xyz(0.0, 2.5, 15.0)
-                .with_rotation(Quat::from_rotation_y(-15.0_f32.to_radians())),
+                .with_rotation(Quat::from_rotation_y(-(15.0_f32.to_radians()))),
             material: materials.add(Color::Srgba(palettes::css::BLACK)),
             ..default()
         },
@@ -214,11 +214,11 @@ fn setup_character(
     commands.spawn((
         CharacterController::default(),
         RigidBody::Kinematic,
-        Collider::cylinder(0.5, 2.0),
+        Collider::capsule(0.5, 1.0),
         PbrBundle {
-            mesh: meshes.add(Cylinder::new(0.5, 2.0)),
+            mesh: meshes.add(Capsule3d::new(0.5, 1.0)),
             material: materials.add(Color::Srgba(Srgba::new(1.0, 0.0, 0.0, 0.5))),
-            transform: Transform::from_xyz(0.0, 1.0, 0.0),
+            transform: Transform::from_xyz(0.0, 2.0, 0.0),
             ..default()
         },
     ));
@@ -273,7 +273,9 @@ fn set_velocity(
     let move_direction = camera_rotation.mul_vec3(direction);
 
     for mut character_controller in &mut query {
-        character_controller.velocity = move_direction.normalize_or_zero() * PLAYER_SPEED;
+        character_controller.velocity.x = move_direction.normalize_or_zero().x * PLAYER_SPEED;
+        character_controller.velocity.z = move_direction.normalize_or_zero().z * PLAYER_SPEED;
+        character_controller.velocity.y = -9.81; // * time.delta_seconds();
         recorded_velocities
             .0
             .insert(frame_count.0, character_controller.velocity);

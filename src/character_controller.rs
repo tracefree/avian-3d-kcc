@@ -4,7 +4,8 @@ use bevy_debug_text_overlay::screen_print;
 
 use crate::schedule::CustomPostUpdate;
 
-const MAX_BOUNCES: u8 = 5;
+const MAX_BOUNCES: usize = 4;
+const MAX_CLIP_PLANES: usize = 5;
 const SKIN_WIDTH: f32 = 0.005;
 
 #[derive(SystemSet, Debug, Hash, Eq, PartialEq, Clone)]
@@ -43,7 +44,10 @@ fn move_character_controllers(
         let mut bounce_count = 0;
         let mut hit_count = 0;
 
-        for _ in 0..MAX_BOUNCES {
+        let mut num_planes = 0;
+        let mut planes = [Vec3::ZERO; MAX_CLIP_PLANES];
+
+        'bounce_loop: for _ in 0..MAX_BOUNCES {
             bounce_count += 1;
 
             if let Ok(direction) = direction_result {
@@ -76,16 +80,49 @@ fn move_character_controllers(
                         break;
                     }
 
-                    if hit.time_of_impact >= SKIN_WIDTH {
-                        transform.translation += direction * (hit.time_of_impact - SKIN_WIDTH)
+                    transform.translation += direction * (hit.time_of_impact - SKIN_WIDTH);
+
+                    // If we move above a threshold, consider previous planes as no longer active obstacles.
+                    if (hit.time_of_impact - SKIN_WIDTH).abs() > 0.01 {
+                        num_planes = 0;
                     }
+
+                    // Too many obstacles, let's give up.
+                    if num_planes >= MAX_CLIP_PLANES {
+                        break;
+                    }
+
+                    // Add the obstacle we hit to the sliding planes.
+                    planes[num_planes] = hit.normal1;
+                    num_planes += 1;
 
                     let extra_distance = distance - (hit.time_of_impact - SKIN_WIDTH).max(0.0);
                     let extra_velocity = direction * extra_distance;
 
-                    let projected_velocity =
-                        extra_velocity - (extra_velocity.dot(hit.normal1) * hit.normal1);
+                    // Inspired by Quake's collision resolution
+                    let mut projected_velocity = extra_velocity;
+                    let mut walk_along_crease = false;
+                    'clip_planes: for i in 0..num_planes {
+                        projected_velocity = extra_velocity.reject_from_normalized(planes[i]);
+                        for j in 0..num_planes {
+                            if j != i && projected_velocity.dot(planes[j]) < 0.0 {
+                                walk_along_crease = true;
+                                break 'clip_planes;
+                            }
+                        }
+                    }
 
+                    if walk_along_crease {
+                        if num_planes != 2 {
+                            // Not sure about this...
+                            break 'bounce_loop;
+                        }
+                        let crease_direction = planes[0].cross(planes[1]);
+                        projected_velocity =
+                            crease_direction * crease_direction.dot(projected_velocity);
+                    }
+
+                    // Avoid moving backwards
                     if projected_velocity.dot(*start_direction) <= 0.0 {
                         break;
                     }
